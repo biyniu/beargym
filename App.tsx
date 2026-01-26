@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { HashRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import ActiveWorkout from './components/ActiveWorkout';
@@ -28,12 +28,20 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const isHome = location.pathname === '/';
+  const { logo } = useContext(AppContext);
 
   return (
     <div className="max-w-md mx-auto min-h-screen flex flex-col relative bg-[#121212] text-[#e0e0e0] font-sans">
       <header className="p-4 flex justify-between items-center border-b border-gray-700 bg-neutral-900 sticky top-0 z-40 shadow-md">
-        <div className="flex items-center space-x-2">
-          <i className="fas fa-dumbbell text-red-500"></i>
+        <div className="flex items-center space-x-3">
+          <div className="w-8 h-8 rounded-full overflow-hidden border border-red-600 bg-gray-800">
+             <img 
+               src={logo} 
+               alt="Logo" 
+               className="w-full h-full object-cover"
+               onError={(e) => { (e.target as HTMLImageElement).src='https://img.icons8.com/ios-filled/100/ef4444/bear.png'; }} 
+             />
+          </div>
           <h1 className="text-xl font-bold text-white tracking-wider">BEAR GYM</h1>
         </div>
         {!isHome && (

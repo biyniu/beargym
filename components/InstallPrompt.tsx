@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
+import { AppContext } from '../App';
 
 export default function InstallPrompt() {
   const [showPrompt, setShowPrompt] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const { logo } = useContext(AppContext);
 
   useEffect(() => {
     // 1. Sprawdź czy aplikacja już jest zainstalowana (standalone mode)
@@ -66,8 +68,8 @@ export default function InstallPrompt() {
         </button>
 
         <div className="flex items-start space-x-4 pr-6">
-            <div className="bg-gray-800 p-2 rounded-lg">
-                <i className="fas fa-dumbbell text-red-500 text-2xl"></i>
+            <div className="w-12 h-12 flex-shrink-0 bg-gray-800 rounded-lg overflow-hidden border border-gray-600">
+                <img src={logo} alt="Logo" className="w-full h-full object-cover" />
             </div>
             <div>
                 <h3 className="font-bold text-white text-sm mb-1">Zainstaluj aplikację</h3>
