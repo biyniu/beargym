@@ -63,13 +63,20 @@ const Stopwatch = ({ id, onChange, initialValue }: { id: string, onChange: (val:
   const [time, setTime] = useState<number>(parseInt(initialValue) || 0);
   const [isRunning, setIsRunning] = useState(false);
   const intervalRef = useRef<number | null>(null);
+  const onChangeRef = useRef(onChange);
+
+  // Aktualizuj ref callbacku, aby useEffect interwału nie musiał zależeć od zmiennego propsa onChange
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
     if (isRunning) {
       intervalRef.current = window.setInterval(() => {
         setTime(t => {
           const newVal = t + 1;
-          onChange(newVal.toString());
+          // Używamy refa, aby nie restartować interwału przy każdym renderze rodzica
+          onChangeRef.current(newVal.toString());
           return newVal;
         });
       }, 1000);
@@ -77,7 +84,7 @@ const Stopwatch = ({ id, onChange, initialValue }: { id: string, onChange: (val:
       if (intervalRef.current) clearInterval(intervalRef.current);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [isRunning, onChange]);
+  }, [isRunning]); // Zależność tylko od isRunning
 
   const toggle = () => {
     if (isRunning) {
@@ -240,7 +247,8 @@ export default function ActiveWorkout() {
 }
 
 // Subcomponent for better performance
-const ExerciseCard = ({ exercise, workoutId, index, playAlarm }: { exercise: Exercise, workoutId: string, index: number, playAlarm: () => void }) => {
+// Wrapped in React.memo to prevent unnecessary re-renders when the main clock ticks
+const ExerciseCard = React.memo(({ exercise, workoutId, index, playAlarm }: { exercise: Exercise, workoutId: string, index: number, playAlarm: () => void }) => {
   const lastResult = storage.getLastResult(workoutId, exercise.id);
   const noteId = `note_${workoutId}_${exercise.id}`;
   const [note, setNote] = useState(storage.getTempInput(noteId));
@@ -360,7 +368,7 @@ const ExerciseCard = ({ exercise, workoutId, index, playAlarm }: { exercise: Exe
       />
     </div>
   );
-};
+});
 
 const SavedInput = ({ id, placeholder }: { id: string, placeholder: string }) => {
   const [val, setVal] = useState(storage.getTempInput(id));
