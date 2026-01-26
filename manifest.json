@@ -1,0 +1,21 @@
+{
+  "short_name": "Bear Gym",
+  "name": "Bear Gym Training App",
+  "icons": [
+    {
+      "src": "https://img.icons8.com/ios-filled/192/ef4444/bear.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://img.icons8.com/ios-filled/512/ef4444/bear.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#121212",
+  "background_color": "#121212",
+  "orientation": "portrait"
+}
