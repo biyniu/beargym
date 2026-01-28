@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { storage } from '../services/storage';
 import { CardioSession, CardioType } from '../types';
 import { CLIENT_CONFIG } from '../constants';
@@ -34,7 +34,8 @@ export default function CardioView() {
       notes: form.notes
     };
 
-    const updated = [newSession, ...sessions];
+    // Sortowanie po dacie (malejąco) od razu przy zapisie
+    const updated = [newSession, ...sessions].sort((a,b) => b.date.localeCompare(a.date));
     setSessions(updated);
     storage.saveCardioSessions(updated);
     
@@ -68,6 +69,59 @@ export default function CardioView() {
         });
     }, 100);
   };
+
+  // --- LOGIKA GRUPOWANIA TYGODNIOWEGO (PONIEDZIAŁEK - NIEDZIELA) ---
+  const groupedSessions = useMemo(() => {
+    const groups: { [key: string]: CardioSession[] } = {};
+
+    sessions.forEach(session => {
+        // Parsowanie daty ręczne, aby uniknąć problemów ze strefami czasowymi (UTC vs Local)
+        // Zakładamy, że data w stringu YYYY-MM-DD jest poprawna lokalnie
+        const [y, m, d] = session.date.split('-').map(Number);
+        // Ustawiamy godzinę 12:00, aby uniknąć przesunięć przy zmianie czasu
+        const dateObj = new Date(y, m - 1, d, 12, 0, 0); 
+        
+        const dayOfWeek = dateObj.getDay(); // 0=Nd, 1=Pn, ... 6=So
+        
+        // Obliczamy ile dni cofnąć się do Poniedziałku
+        // Jeśli Pn (1) -> cofnij 0
+        // Jeśli Wt (2) -> cofnij 1
+        // ...
+        // Jeśli Nd (0) -> cofnij 6
+        const dist = (dayOfWeek + 6) % 7;
+        
+        // Data poniedziałku
+        dateObj.setDate(dateObj.getDate() - dist);
+        
+        const monY = dateObj.getFullYear();
+        const monM = (dateObj.getMonth() + 1).toString().padStart(2, '0');
+        const monD = dateObj.getDate().toString().padStart(2, '0');
+        
+        const key = `${monY}-${monM}-${monD}`; // Klucz to data poniedziałku
+        
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(session);
+    });
+
+    // Sortujemy tygodnie malejąco (najnowszy tydzień na górze)
+    return Object.entries(groups)
+        .sort(([dateA], [dateB]) => dateB.localeCompare(dateA))
+        .map(([mondayDate, items]) => {
+            // Obliczamy zakres dat do wyświetlenia (Pon - Nd)
+            const [y, m, d] = mondayDate.split('-').map(Number);
+            const start = new Date(y, m - 1, d, 12, 0, 0);
+            const end = new Date(start);
+            end.setDate(end.getDate() + 6); // +6 dni to Niedziela
+
+            const formatD = (dObj: Date) => `${dObj.getDate().toString().padStart(2,'0')}.${(dObj.getMonth()+1).toString().padStart(2,'0')}`;
+            
+            return {
+                label: `${formatD(start)} - ${formatD(end)}`,
+                items: items, // items są już posortowane w state (główna lista sessions)
+                count: items.length
+            };
+        });
+  }, [sessions]);
 
   return (
     <div className="animate-fade-in pb-10">
@@ -136,50 +190,64 @@ export default function CardioView() {
         </div>
       </div>
 
-      {/* Kontener do PDF i wyświetlania */}
-      <div ref={contentRef} className="bg-[#121212] p-2 rounded-xl">
+      {/* Kontener do PDF i wyświetlania - ZGRUPOWANA HISTORIA */}
+      <div ref={contentRef} className="bg-[#121212] p-2 rounded-xl min-h-[200px]">
          {/* Nagłówek widoczny w PDF */}
          <div className="mb-4 text-center border-b border-gray-700 pb-2 hidden print:block" style={{display: isGeneratingPdf ? 'block' : 'none'}}>
             <h1 className="text-2xl font-bold text-red-500">RAPORT CARDIO</h1>
             <p className="text-gray-400 text-sm">{CLIENT_CONFIG.name}</p>
         </div>
 
-        <h3 className="font-bold text-gray-300 mb-3 px-2 flex items-center">
-            <i className="fas fa-history mr-2 text-red-500"></i> Historia ({sessions.length})
+        <h3 className="font-bold text-gray-300 mb-4 px-1 flex items-center justify-between">
+            <span><i className="fas fa-history mr-2 text-red-500"></i> Historia</span>
+            <span className="text-xs text-gray-500">Łącznie: {sessions.length}</span>
         </h3>
 
-        <div className="space-y-3">
-            {sessions.map(session => {
-                const typeInfo = cardioTypes.find(t => t.value === session.type);
-                return (
-                    <div key={session.id} className="bg-[#1e1e1e] p-4 rounded-xl shadow border border-gray-800 flex justify-between items-center break-inside-avoid">
-                        <div className="flex items-center space-x-4">
-                            <div className="bg-gray-800 w-12 h-12 rounded-full flex items-center justify-center text-red-500 text-xl border border-gray-700">
-                                <i className={`fas ${typeInfo?.icon || 'fa-heartbeat'}`}></i>
-                            </div>
-                            <div>
-                                <div className="text-white font-bold text-lg">{typeInfo?.label}</div>
-                                <div className="text-gray-400 text-xs">
-                                    <i className="fas fa-calendar-alt mr-1"></i> {session.date} 
-                                    <span className="mx-2">|</span>
-                                    <i className="fas fa-clock mr-1"></i> {session.duration}
-                                </div>
-                            </div>
-                        </div>
-                        
-                        {!isGeneratingPdf && (
-                            <button 
-                                onClick={() => handleDelete(session.id)}
-                                className="text-red-900 hover:text-red-500 p-2 transition"
-                            >
-                                <i className="fas fa-trash"></i>
-                            </button>
-                        )}
+        <div className="space-y-6">
+            {groupedSessions.length > 0 ? groupedSessions.map((group, gIdx) => (
+                <div key={gIdx} className="break-inside-avoid">
+                    {/* Nagłówek tygodnia */}
+                    <div className="flex items-center justify-between border-b border-gray-700 pb-1 mb-2 px-1">
+                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                            Tydzień: <span className="text-white ml-1">{group.label}</span>
+                        </span>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${group.count >= 3 ? 'bg-green-900 text-green-300' : 'bg-gray-800 text-gray-300'}`}>
+                            {group.count} {group.count === 1 ? 'trening' : group.count < 5 ? 'treningi' : 'treningów'}
+                        </span>
                     </div>
-                );
-            })}
-            
-            {sessions.length === 0 && (
+
+                    {/* Lista w danym tygodniu */}
+                    <div className="space-y-2">
+                        {group.items.map(session => {
+                            const typeInfo = cardioTypes.find(t => t.value === session.type);
+                            return (
+                                <div key={session.id} className="bg-[#1e1e1e] p-3 rounded-lg border border-gray-800 flex justify-between items-center hover:bg-[#252525] transition">
+                                    <div className="flex items-center space-x-3">
+                                        <div className="bg-gray-800 w-10 h-10 rounded-full flex items-center justify-center text-red-500 text-lg border border-gray-700 shrink-0">
+                                            <i className={`fas ${typeInfo?.icon || 'fa-heartbeat'}`}></i>
+                                        </div>
+                                        <div>
+                                            <div className="text-white font-bold text-sm">{typeInfo?.label}</div>
+                                            <div className="text-gray-400 text-[10px]">
+                                                {session.date} • <span className="text-gray-200 font-mono">{session.duration}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    {!isGeneratingPdf && (
+                                        <button 
+                                            onClick={() => handleDelete(session.id)}
+                                            className="text-gray-600 hover:text-red-500 p-2 transition"
+                                        >
+                                            <i className="fas fa-trash-alt"></i>
+                                        </button>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )) : (
                 <p className="text-center text-gray-500 py-6">Brak zapisanych sesji cardio.</p>
             )}
         </div>
