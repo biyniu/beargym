@@ -1,7 +1,7 @@
 import React, { useContext, useState, useRef } from 'react';
 import { AppContext } from '../App';
 import { DEFAULT_WORKOUTS, CLIENT_CONFIG } from '../constants';
-import { Exercise } from '../types';
+import { Exercise, WorkoutPlan } from '../types';
 
 export default function SettingsView() {
   const { settings, updateSettings, playAlarm, workouts, updateWorkouts } = useContext(AppContext);
@@ -9,20 +9,34 @@ export default function SettingsView() {
   const [editingExerciseIdx, setEditingExerciseIdx] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Helper do bezpiecznej aktualizacji stanu (immutable update)
+  const updatePlanExercises = (workoutId: string, newExercises: Exercise[]) => {
+    const newWorkouts = { ...workouts };
+    newWorkouts[workoutId] = {
+        ...newWorkouts[workoutId],
+        exercises: newExercises
+    };
+    updateWorkouts(newWorkouts);
+  };
+
   // --- Exercise Editor Sub-logic ---
   const handleEditSave = (updatedEx: Exercise) => {
     if (!selectedWorkoutId || editingExerciseIdx === null) return;
-    const newWorkouts = { ...workouts };
-    newWorkouts[selectedWorkoutId].exercises[editingExerciseIdx] = updatedEx;
-    updateWorkouts(newWorkouts);
+    
+    const currentExercises = [...workouts[selectedWorkoutId].exercises];
+    currentExercises[editingExerciseIdx] = updatedEx;
+    
+    updatePlanExercises(selectedWorkoutId, currentExercises);
     setEditingExerciseIdx(null);
   };
 
   const handleDeleteExercise = (idx: number) => {
     if (!window.confirm("Usunąć trwale?")) return;
-    const newWorkouts = { ...workouts };
-    newWorkouts[selectedWorkoutId].exercises.splice(idx, 1);
-    updateWorkouts(newWorkouts);
+    
+    const currentExercises = [...workouts[selectedWorkoutId].exercises];
+    currentExercises.splice(idx, 1);
+    
+    updatePlanExercises(selectedWorkoutId, currentExercises);
     setEditingExerciseIdx(null);
   };
 
@@ -40,17 +54,19 @@ export default function SettingsView() {
       link: "", 
       type: "standard" 
     };
-    const newWorkouts = { ...workouts };
-    newWorkouts[selectedWorkoutId].exercises.push(newEx);
-    updateWorkouts(newWorkouts);
-    setEditingExerciseIdx(newWorkouts[selectedWorkoutId].exercises.length - 1);
+    
+    const currentExercises = [...workouts[selectedWorkoutId].exercises];
+    currentExercises.push(newEx);
+    
+    updatePlanExercises(selectedWorkoutId, currentExercises);
+    setEditingExerciseIdx(currentExercises.length - 1);
   };
 
   const handleReset = () => {
     if (!selectedWorkoutId) return;
     if (window.confirm("Przywrócić domyślne ćwiczenia dla tego planu?")) {
       const newWorkouts = { ...workouts };
-      // Copy default to break ref
+      // Głęboka kopia domyślnego planu, aby odciąć referencje
       newWorkouts[selectedWorkoutId] = JSON.parse(JSON.stringify(DEFAULT_WORKOUTS[selectedWorkoutId]));
       updateWorkouts(newWorkouts);
       setEditingExerciseIdx(null);
@@ -59,12 +75,14 @@ export default function SettingsView() {
 
   const handleMove = (idx: number, dir: number) => {
     if (!selectedWorkoutId) return;
+    
     const exercises = [...workouts[selectedWorkoutId].exercises];
     const newIdx = idx + dir;
-    [exercises[idx], exercises[newIdx]] = [exercises[newIdx], exercises[idx]];
-    const newWorkouts = { ...workouts };
-    newWorkouts[selectedWorkoutId].exercises = exercises;
-    updateWorkouts(newWorkouts);
+    
+    if (newIdx >= 0 && newIdx < exercises.length) {
+        [exercises[idx], exercises[newIdx]] = [exercises[newIdx], exercises[idx]];
+        updatePlanExercises(selectedWorkoutId, exercises);
+    }
   };
 
   // --- Backup Logic ---
@@ -193,7 +211,7 @@ export default function SettingsView() {
             onChange={(e) => { setSelectedWorkoutId(e.target.value); setEditingExerciseIdx(null); }}
           >
             <option value="">-- Wybierz Plan --</option>
-            {Object.entries(workouts).map(([id, data]) => (
+            {(Object.entries(workouts) as [string, WorkoutPlan][]).map(([id, data]) => (
               <option key={id} value={id}>{data.title}</option>
             ))}
           </select>

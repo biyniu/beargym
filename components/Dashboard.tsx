@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../App';
 import { storage } from '../services/storage';
 import { CLIENT_CONFIG } from '../constants';
+import { WorkoutPlan } from '../types';
 
 export default function Dashboard() {
   const { workouts, logo, updateLogo } = useContext(AppContext);
@@ -52,7 +53,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid gap-4">
-        {Object.entries(workouts).map(([id, data]) => (
+        {(Object.entries(workouts) as [string, WorkoutPlan][]).map(([id, data]) => (
           <button 
             key={id}
             onClick={() => navigate(`/workout/${id}`)} 

@@ -65,7 +65,7 @@ const Stopwatch = ({ id, onChange, initialValue }: { id: string, onChange: (val:
   const intervalRef = useRef<number | null>(null);
   const onChangeRef = useRef(onChange);
 
-  // Aktualizuj ref callbacku, aby useEffect interwału nie musiał zależeć od zmiennego propsa onChange
+  // Aktualizuj ref callbacku
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
@@ -75,7 +75,6 @@ const Stopwatch = ({ id, onChange, initialValue }: { id: string, onChange: (val:
       intervalRef.current = window.setInterval(() => {
         setTime(t => {
           const newVal = t + 1;
-          // Używamy refa, aby nie restartować interwału przy każdym renderze rodzica
           onChangeRef.current(newVal.toString());
           return newVal;
         });
@@ -84,15 +83,13 @@ const Stopwatch = ({ id, onChange, initialValue }: { id: string, onChange: (val:
       if (intervalRef.current) clearInterval(intervalRef.current);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [isRunning]); // Zależność tylko od isRunning
+  }, [isRunning]);
 
   const toggle = () => {
     if (isRunning) {
-      // Stop
       setIsRunning(false);
       storage.saveTempInput(id, time.toString());
     } else {
-      // Start (reset if 0 or continue?) - behaving like stop/resume
       if(time === 0) setTime(0);
       setIsRunning(true);
     }
@@ -121,6 +118,27 @@ const Stopwatch = ({ id, onChange, initialValue }: { id: string, onChange: (val:
   );
 };
 
+// Custom Modal for Success Message
+const SuccessModal = ({ onClose }: { onClose: () => void }) => {
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 animate-fade-in p-4">
+            <div className="bg-[#1e1e1e] border border-green-600 rounded-xl shadow-2xl p-6 max-w-sm w-full text-center relative">
+                <div className="w-16 h-16 bg-green-900 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-green-500">
+                    <i className="fas fa-check text-2xl text-white"></i>
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">Sukces!</h3>
+                <p className="text-gray-300 mb-6">Gratulacje, twój trening został zapisany.</p>
+                <button 
+                    onClick={onClose}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition transform active:scale-95"
+                >
+                    OK
+                </button>
+            </div>
+        </div>
+    );
+};
+
 // Main Component
 export default function ActiveWorkout() {
   const { id } = useParams();
@@ -130,6 +148,7 @@ export default function ActiveWorkout() {
   
   // Total Workout Timer State
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   useEffect(() => {
     const startTime = Date.now();
@@ -172,9 +191,6 @@ export default function ActiveWorkout() {
 
     if(!hasData && !window.confirm("Zakończyć pusty trening?")) return;
 
-    // Append total time to the workout note or log it? 
-    // For now, we just log it in the timestamp but we could append it to a specific field later.
-    // Let's modify the date string to include duration for simplicity in history view
     const timeStr = formatTime(elapsedTime);
     const finalDateStr = `${dateStr} (${timeStr})`;
 
@@ -187,12 +203,14 @@ export default function ActiveWorkout() {
     storage.saveHistory(id, history);
     storage.clearTempInputs(id, workoutData.exercises);
     
-    alert(`Trening zapisany! Czas: ${timeStr}`);
-    navigate('/');
+    // Pokaż modal zamiast alertu
+    setShowSuccessModal(true);
   };
 
   return (
-    <div className="animate-fade-in pb-10">
+    <div className="animate-fade-in pb-10 relative">
+      {showSuccessModal && <SuccessModal onClose={() => navigate('/')} />}
+
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-bold text-white truncate max-w-[60%]">{workoutData.title}</h2>
         <div className="bg-gray-800 px-3 py-1 rounded border border-gray-600 flex items-center space-x-2">
@@ -252,7 +270,6 @@ const ExerciseCard = React.memo(({ exercise, workoutId, index, playAlarm }: { ex
   const lastResult = storage.getLastResult(workoutId, exercise.id);
   const noteId = `note_${workoutId}_${exercise.id}`;
   const [note, setNote] = useState(storage.getTempInput(noteId));
-  // Wersja do wymuszania przerysowania inputów po kliknięciu "Wypełnij"
   const [fillVersion, setFillVersion] = useState(0);
 
   const handleNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -263,7 +280,7 @@ const ExerciseCard = React.memo(({ exercise, workoutId, index, playAlarm }: { ex
   const handleFillWeights = () => {
     if (!lastResult) return;
     
-    // Szukamy wszystkich ciężarów w stringu (np. "100kg x 5 | 105kg x 5")
+    // Szukamy wszystkich ciężarów w stringu
     const matches = Array.from(lastResult.matchAll(/(\d+(?:[.,]\d+)?)\s*kg/gi));
     
     if (matches.length === 0) {
@@ -273,19 +290,15 @@ const ExerciseCard = React.memo(({ exercise, workoutId, index, playAlarm }: { ex
 
     let filledCount = 0;
     for(let i=1; i<=exercise.sets; i++) {
-        // Jeśli mamy mniej wyników z historii niż serii, używamy ostatniego znalezionego
         const matchIndex = Math.min(i-1, matches.length - 1);
-        const weight = matches[matchIndex][1]; // Grupa 1 to liczba
+        const weight = matches[matchIndex][1];
         
-        // Zapisz do storage
         const uid = `input_${workoutId}_${exercise.id}_s${i}`;
         storage.saveTempInput(`${uid}_kg`, weight);
-        // Nie ruszamy pola reps (zostaje puste lub stare jeśli coś wpisano)
         filledCount++;
     }
 
     if(filledCount > 0) {
-        // Wymuś odświeżenie komponentów SavedInput poprzez zmianę klucza
         setFillVersion(v => v + 1);
     }
   };
@@ -370,7 +383,7 @@ const ExerciseCard = React.memo(({ exercise, workoutId, index, playAlarm }: { ex
   );
 });
 
-const SavedInput = ({ id, placeholder }: { id: string, placeholder: string }) => {
+const SavedInput: React.FC<{ id: string, placeholder: string }> = ({ id, placeholder }) => {
   const [val, setVal] = useState(storage.getTempInput(id));
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {

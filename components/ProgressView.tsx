@@ -3,6 +3,7 @@ import { AppContext } from '../App';
 import { storage } from '../services/storage';
 import { CLIENT_CONFIG } from '../constants';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { WorkoutPlan } from '../types';
 
 // Deklaracja dla globalnej biblioteki załadowanej w index.html
 declare var html2pdf: any;
@@ -53,7 +54,7 @@ export default function ProgressView() {
 
     const element = contentRef.current;
     const opt = {
-      margin:       [10, 10],
+      margin:       [5, 5],
       filename:     `Raport_${CLIENT_CONFIG.name.replace(/\s+/g, '_')}_${selectedWorkoutId}.pdf`,
       image:        { type: 'jpeg', quality: 0.98 },
       html2canvas:  { scale: 2, useCORS: true, logging: false },
@@ -74,13 +75,13 @@ export default function ProgressView() {
     return (
       <text 
         x={x} 
-        y={y - 10} 
+        y={y - 8} 
         fill="#fff" 
         textAnchor="middle" 
-        fontSize={10} 
+        fontSize={8} 
         fontWeight="bold"
       >
-        {value}kg
+        {value}
       </text>
     );
   };
@@ -100,7 +101,7 @@ export default function ProgressView() {
                 onChange={(e) => setSelectedWorkoutId(e.target.value)}
                 className="flex-grow bg-gray-800 text-white p-3 rounded-lg border border-gray-600 focus:border-red-500 outline-none"
             >
-                {Object.entries(workouts).map(([id, data]) => (
+                {(Object.entries(workouts) as [string, WorkoutPlan][]).map(([id, data]) => (
                 <option key={id} value={id}>{data.title}</option>
                 ))}
             </select>
@@ -117,103 +118,108 @@ export default function ProgressView() {
       </div>
 
       {/* Kontener treści do eksportu */}
-      <div ref={contentRef} className="bg-[#121212] p-2 md:p-4 rounded-xl">
-        
-        {/* Nagłówek widoczny w PDF */}
-        <div className="mb-6 text-center border-b border-gray-700 pb-4">
-            <h1 className="text-3xl font-bold text-red-500 uppercase">{currentWorkout?.title}</h1>
-            <p className="text-gray-400">Raport postępów: {CLIENT_CONFIG.name}</p>
-            <p className="text-gray-500 text-sm">Data generowania: {new Date().toLocaleDateString()}</p>
-        </div>
-
-        <div className="grid grid-cols-1 gap-6">
-            {currentWorkout?.exercises.map((ex) => {
-                const data = getExerciseData(selectedWorkoutId, ex.id);
-                const hasData = data && data.length > 0;
-                
-                if (!hasData) return null; 
-
-                // Obliczamy domenę ręcznie
-                const weights = data.map((d: any) => d.weight);
-                const minVal = Math.min(...weights);
-                const maxVal = Math.max(...weights);
-                
-                // Marginesy: dół -5 (min 0), góra +20% wartości (żeby zmieścił się napis nad kropką)
-                const domainMin = Math.max(0, Math.floor(minVal - 5));
-                const domainMax = Math.ceil(maxVal * 1.2); 
-                const yDomain = [domainMin, domainMax];
-
-                const maxWeight = maxVal;
-
-                return (
-                    <div key={ex.id} className="bg-[#1e1e1e] p-4 rounded-xl shadow-md border border-gray-800 break-inside-avoid">
-                        <div className="flex justify-between items-end mb-4 border-b border-gray-700 pb-2">
-                            <div>
-                                <h3 className="font-bold text-white text-lg">{ex.name}</h3>
-                                <p className="text-xs text-gray-500">{ex.pl}</p>
-                            </div>
-                            <div className="text-right">
-                                <span className="text-xs text-gray-400 block">Max wynik</span>
-                                <span className="text-xl font-bold text-blue-400">{maxWeight} kg</span>
-                            </div>
-                        </div>
-
-                        <div className="h-48 md:h-64 w-full">
-                            {data.length < 2 ? (
-                                <div className="h-full flex items-center justify-center text-gray-600 text-xs text-center">
-                                    Za mało danych do wyrysowania linii.<br/>(Wymagane min. 2 treningi z ciężarem)
-                                </div>
-                            ) : (
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={data as any} margin={{ top: 20, right: 10, bottom: 0, left: 10 }}>
-                                    <CartesianGrid stroke="#333" strokeDasharray="3 3" vertical={false} />
-                                    <XAxis 
-                                        dataKey="date" 
-                                        stroke="#666" 
-                                        tick={{fill: '#888', fontSize: 10}} 
-                                        tickMargin={8}
-                                        minTickGap={30}
-                                    />
-                                    {/* Ukryta oś Y, ale z ustawionym zakresem */}
-                                    <YAxis 
-                                        type="number"
-                                        domain={yDomain}
-                                        hide={true} 
-                                    />
-                                    <Tooltip 
-                                        contentStyle={{ backgroundColor: '#111', border: '1px solid #444', borderRadius: '4px', fontSize: '12px' }}
-                                        itemStyle={{ color: '#fff' }}
-                                        formatter={(value: any) => [`${value} kg`, 'Ciężar']}
-                                        labelStyle={{ color: '#aaa', marginBottom: '2px' }}
-                                    />
-                                    <Line 
-                                        type="monotone" 
-                                        dataKey="weight" 
-                                        stroke="#ef4444" 
-                                        strokeWidth={2} 
-                                        dot={{ r: 3, fill: '#ef4444', strokeWidth: 1, stroke: '#1e1e1e' }} 
-                                        activeDot={{ r: 5, fill: '#fff' }}
-                                        isAnimationActive={false}
-                                        label={<CustomLabel />}
-                                    />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            )}
-                        </div>
-                    </div>
-                );
-            })}
+      {/* min-w-[700px] wymusza układ szeroki dla generatora PDF nawet na mobile */}
+      <div className="overflow-x-auto">
+          <div ref={contentRef} className="bg-[#121212] p-2 md:p-4 rounded-xl min-w-[700px]">
             
-            {currentWorkout?.exercises.every(ex => {
-                 const d = getExerciseData(selectedWorkoutId, ex.id);
-                 return !d || d.length === 0;
-            }) && (
-                <div className="col-span-full text-center py-10 text-gray-500">
-                    <i className="fas fa-chart-bar text-4xl mb-4 opacity-50"></i>
-                    <p>Brak danych dla wybranego planu. Uzupełnij treningi, wpisując ciężar (np. "100kg").</p>
+            {/* Nagłówek widoczny w PDF */}
+            <div className="mb-4 text-center border-b border-gray-700 pb-2">
+                <h1 className="text-2xl font-bold text-red-500 uppercase">{currentWorkout?.title}</h1>
+                <div className="flex justify-between text-gray-400 text-xs mt-1 px-4">
+                    <span>Raport: {CLIENT_CONFIG.name}</span>
+                    <span>Data: {new Date().toLocaleDateString()}</span>
                 </div>
-            )}
-        </div>
+            </div>
+
+            {/* Grid 2 kolumnowy dla PDF (dzięki min-w-700) */}
+            <div className="grid grid-cols-2 gap-3">
+                {currentWorkout?.exercises.map((ex) => {
+                    const data = getExerciseData(selectedWorkoutId, ex.id);
+                    const hasData = data && data.length > 0;
+                    
+                    if (!hasData) return null; 
+
+                    // Obliczamy domenę ręcznie
+                    const weights = data.map((d: any) => d.weight);
+                    const minVal = Math.min(...weights);
+                    const maxVal = Math.max(...weights);
+                    
+                    // Marginesy
+                    const domainMin = Math.max(0, Math.floor(minVal - 5));
+                    const domainMax = Math.ceil(maxVal * 1.2); 
+                    const yDomain = [domainMin, domainMax];
+
+                    const maxWeight = maxVal;
+
+                    return (
+                        <div key={ex.id} className="bg-[#1e1e1e] p-2 rounded-lg shadow-sm border border-gray-800 break-inside-avoid">
+                            <div className="flex justify-between items-end mb-2 border-b border-gray-700 pb-1">
+                                <div>
+                                    <h3 className="font-bold text-white text-xs truncate max-w-[150px]">{ex.name}</h3>
+                                </div>
+                                <div className="text-right">
+                                    <span className="text-[10px] text-gray-400 block">Max</span>
+                                    <span className="text-sm font-bold text-blue-400">{maxWeight} kg</span>
+                                </div>
+                            </div>
+
+                            {/* Zmniejszona wysokość wykresu */}
+                            <div className="h-40 w-full">
+                                {data.length < 2 ? (
+                                    <div className="h-full flex items-center justify-center text-gray-600 text-[10px] text-center">
+                                        Za mało danych do linii.
+                                    </div>
+                                ) : (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={data as any} margin={{ top: 15, right: 10, bottom: 0, left: 5 }}>
+                                        <CartesianGrid stroke="#333" strokeDasharray="3 3" vertical={false} />
+                                        <XAxis 
+                                            dataKey="date" 
+                                            stroke="#666" 
+                                            tick={{fill: '#888', fontSize: 8}} 
+                                            tickMargin={5}
+                                            minTickGap={20}
+                                        />
+                                        <YAxis 
+                                            type="number"
+                                            domain={yDomain}
+                                            hide={true} 
+                                        />
+                                        <Tooltip 
+                                            contentStyle={{ backgroundColor: '#111', border: '1px solid #444', borderRadius: '4px', fontSize: '10px', padding: '5px' }}
+                                            itemStyle={{ color: '#fff' }}
+                                            formatter={(value: any) => [`${value} kg`, '']}
+                                            labelStyle={{ color: '#aaa', marginBottom: '2px' }}
+                                        />
+                                        <Line 
+                                            type="monotone" 
+                                            dataKey="weight" 
+                                            stroke="#ef4444" 
+                                            strokeWidth={1.5} 
+                                            dot={{ r: 2, fill: '#ef4444', strokeWidth: 1, stroke: '#1e1e1e' }} 
+                                            activeDot={{ r: 4, fill: '#fff' }}
+                                            isAnimationActive={false}
+                                            label={<CustomLabel />}
+                                        />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
+                
+                {currentWorkout?.exercises.every(ex => {
+                    const d = getExerciseData(selectedWorkoutId, ex.id);
+                    return !d || d.length === 0;
+                }) && (
+                    <div className="col-span-full text-center py-10 text-gray-500">
+                        <i className="fas fa-chart-bar text-4xl mb-4 opacity-50"></i>
+                        <p>Brak danych dla wybranego planu.</p>
+                    </div>
+                )}
+            </div>
+          </div>
       </div>
     </div>
   );
