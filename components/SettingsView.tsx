@@ -1,9 +1,9 @@
-import React, { useContext, useState, useRef } from 'react';
+import React, { useContext, useState, useRef, useEffect } from 'react';
 import { AppContext } from '../App';
 import { storage } from '../services/storage';
 import { DEFAULT_WORKOUTS, CLIENT_CONFIG } from '../constants';
-import { Exercise, WorkoutPlan, BodyMeasurement, CardioSession, WorkoutHistoryEntry } from '../types';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
+import { Exercise, WorkoutPlan, CardioSession, WorkoutHistoryEntry } from '../types';
+import { LineChart, Line, ResponsiveContainer } from 'recharts';
 
 declare var html2pdf: any;
 
@@ -13,6 +13,14 @@ export default function SettingsView() {
   const [editingExerciseIdx, setEditingExerciseIdx] = useState<number | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   
+  // Cardio Date Range State (Default: First day of current month -> Today)
+  const [cardioStartDate, setCardioStartDate] = useState(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 30); // Default last 30 days
+    return date.toISOString().split('T')[0];
+  });
+  const [cardioEndDate, setCardioEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const reportRef = useRef<HTMLDivElement>(null);
 
@@ -164,25 +172,28 @@ export default function SettingsView() {
     }).filter(Boolean);
   };
 
-  const getMeasurementsData = () => {
-    const m = storage.getMeasurements();
-    if(m.length < 2) return [];
-    return m.slice().reverse().map(item => ({
-        date: item.date.slice(5), // Remove Year for chart clarity
-        weight: parseFloat(item.weight) || 0
-    })).filter(d => d.weight > 0);
+  const getFilteredCardio = () => {
+    let sessions = storage.getCardioSessions();
+    if (cardioStartDate) {
+        sessions = sessions.filter(s => s.date >= cardioStartDate);
+    }
+    if (cardioEndDate) {
+        sessions = sessions.filter(s => s.date <= cardioEndDate);
+    }
+    return sessions;
   };
 
   const getCardioSummary = () => {
-    const s = storage.getCardioSessions();
-    if(s.length === 0) return { count: 0, range: "Brak danych" };
+    const s = getFilteredCardio();
+    if(s.length === 0) return { count: 0, range: "Brak w tym okresie" };
     
-    const dates = s.map(i => new Date(i.date).getTime());
-    const min = new Date(Math.min(...dates)).toLocaleDateString();
-    const max = new Date(Math.max(...dates)).toLocaleDateString();
+    // Używamy dat z formularza do opisu zakresu, jeśli są wybrane, lub faktycznych dat z danych
+    const startLabel = cardioStartDate || "Początek";
+    const endLabel = cardioEndDate || "Dzisiaj";
+    
     return {
         count: s.length,
-        range: min === max ? min : `${min} - ${max}`
+        range: `${startLabel} - ${endLabel}`
     };
   };
 
@@ -194,7 +205,7 @@ export default function SettingsView() {
     const element = reportRef.current;
     const opt = {
       margin:       0,
-      filename:     `Raport_Calkowity_${CLIENT_CONFIG.name.replace(/\s+/g, '_')}.pdf`,
+      filename:     `Raport_Analiza_${CLIENT_CONFIG.name.replace(/\s+/g, '_')}.pdf`,
       image:        { type: 'jpeg', quality: 0.98 },
       html2canvas:  { scale: 2, useCORS: true, logging: false },
       jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
@@ -246,11 +257,37 @@ export default function SettingsView() {
       {/* Reports Section */}
       <div className="bg-[#1e1e1e] rounded-xl shadow-md p-5 mb-6 border-l-4 border-green-600">
         <h3 className="text-lg font-bold text-white mb-4 flex items-center">
-          <i className="fas fa-file-pdf text-green-500 mr-2"></i>Raporty
+          <i className="fas fa-file-pdf text-green-500 mr-2"></i>Raporty & Analiza
         </h3>
         <p className="text-sm text-gray-400 mb-4">
-            Wygeneruj pełny raport zawierający pomiary ciała (z wykresem), historię cardio oraz dziennik treningowy z wykresami postępu.
+            Generuj PDF z wykresami postępów i analizą Cardio.
         </p>
+
+        {/* Date Filter for Cardio */}
+        <div className="bg-black/30 p-3 rounded-lg mb-4 border border-gray-700">
+            <h4 className="text-xs text-green-400 font-bold mb-2 uppercase">Zakres dat dla Cardio</h4>
+            <div className="grid grid-cols-2 gap-3">
+                <div>
+                    <label className="text-[10px] text-gray-500 block mb-1">Od:</label>
+                    <input 
+                        type="date" 
+                        value={cardioStartDate}
+                        onChange={(e) => setCardioStartDate(e.target.value)}
+                        className="w-full bg-gray-800 text-white text-xs p-2 rounded border border-gray-600 outline-none"
+                    />
+                </div>
+                <div>
+                    <label className="text-[10px] text-gray-500 block mb-1">Do:</label>
+                    <input 
+                        type="date" 
+                        value={cardioEndDate}
+                        onChange={(e) => setCardioEndDate(e.target.value)}
+                        className="w-full bg-gray-800 text-white text-xs p-2 rounded border border-gray-600 outline-none"
+                    />
+                </div>
+            </div>
+        </div>
+
         <button 
             onClick={handleGenerateReport}
             disabled={isGeneratingReport}
@@ -259,7 +296,7 @@ export default function SettingsView() {
             {isGeneratingReport ? (
                 <span className="flex items-center"><i className="fas fa-spinner fa-spin mr-2"></i> Generowanie...</span>
             ) : (
-                <span className="flex items-center"><i className="fas fa-file-contract mr-2 text-xl"></i> POBIERZ PEŁNY RAPORT PDF</span>
+                <span className="flex items-center"><i className="fas fa-file-contract mr-2 text-xl"></i> POBIERZ RAPORT ANALITYCZNY</span>
             )}
         </button>
       </div>
@@ -380,7 +417,7 @@ export default function SettingsView() {
                     </div>
                     <div>
                         <h1 className="text-3xl font-bold tracking-wider">BEAR GYM</h1>
-                        <p className="text-gray-400 text-sm mt-1">RAPORT POSTĘPÓW</p>
+                        <p className="text-gray-400 text-sm mt-1">RAPORT ANALITYCZNY</p>
                     </div>
                 </div>
                 <div className="text-right">
@@ -391,69 +428,15 @@ export default function SettingsView() {
 
             <div className="px-8 pb-8 space-y-12">
                 
-                {/* SECTION 1: MEASUREMENTS */}
-                <section className="break-inside-avoid page-break-after-auto">
-                    <div className="flex justify-between items-center border-b border-green-800 pb-2 mb-6">
-                        <h2 className="text-xl font-bold text-green-500 flex items-center">
-                            <i className="fas fa-ruler-combined mr-2"></i> Pomiary Ciała
-                        </h2>
-                    </div>
-
-                    {/* Measurement Chart */}
-                    {getMeasurementsData().length > 1 && (
-                        <div className="bg-[#181818] p-4 rounded border border-gray-800 mb-6 break-inside-avoid">
-                            <h4 className="text-xs text-gray-400 mb-2 uppercase font-bold text-center">Zmiana Wagi (kg)</h4>
-                            <div className="h-[150px] w-full">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={getMeasurementsData()}>
-                                        <CartesianGrid stroke="#333" strokeDasharray="3 3" vertical={false} />
-                                        <XAxis dataKey="date" stroke="#666" tick={{fill: '#888', fontSize: 10}} />
-                                        <YAxis domain={['auto', 'auto']} hide />
-                                        <Line type="monotone" dataKey="weight" stroke="#10b981" strokeWidth={2} dot={{r:3, fill:'#10b981'}} isAnimationActive={false} />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                    )}
-
-                    <table className="w-full text-sm text-left text-gray-300">
-                        <thead className="bg-[#1e1e1e] text-white uppercase text-xs">
-                            <tr>
-                                <th className="px-4 py-2">Data</th>
-                                <th className="px-4 py-2">Waga</th>
-                                <th className="px-4 py-2">Pas</th>
-                                <th className="px-4 py-2">Klatka</th>
-                                <th className="px-4 py-2">Biceps</th>
-                                <th className="px-4 py-2">Udo</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-800">
-                            {storage.getMeasurements().length > 0 ? storage.getMeasurements().slice().reverse().map(m => (
-                                <tr key={m.id} className="hover:bg-gray-900">
-                                    <td className="px-4 py-2 font-bold text-white">{m.date}</td>
-                                    <td className="px-4 py-2">{m.weight}</td>
-                                    <td className="px-4 py-2">{m.waist}</td>
-                                    <td className="px-4 py-2">{m.chest}</td>
-                                    <td className="px-4 py-2">{m.biceps}</td>
-                                    <td className="px-4 py-2">{m.thigh}</td>
-                                </tr>
-                            )) : (
-                                <tr><td colSpan={6} className="px-4 py-4 text-center text-gray-500">Brak pomiarów</td></tr>
-                            )}
-                        </tbody>
-                    </table>
-                </section>
-
-                {/* SECTION 2: CARDIO */}
+                {/* SECTION: CARDIO (FILTERED) */}
                 <section className="break-inside-avoid">
                     <div className="flex justify-between items-center border-b border-blue-800 pb-2 mb-6">
                         <h2 className="text-xl font-bold text-blue-500 flex items-center">
-                            <i className="fas fa-heartbeat mr-2"></i> Historia Cardio
+                            <i className="fas fa-heartbeat mr-2"></i> Cardio
                         </h2>
-                        <div className="text-xs text-gray-400">
-                            Zakres: <span className="text-white font-mono ml-1">{getCardioSummary().range}</span>
-                            <span className="mx-2">|</span>
-                            Sesje: <span className="text-white font-mono ml-1">{getCardioSummary().count}</span>
+                        <div className="text-xs text-gray-400 text-right">
+                            <div className="text-white font-mono">{getCardioSummary().range}</div>
+                            <div>Sesje: <span className="text-white font-bold">{getCardioSummary().count}</span></div>
                         </div>
                     </div>
                     
@@ -467,7 +450,7 @@ export default function SettingsView() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-800">
-                            {storage.getCardioSessions().length > 0 ? storage.getCardioSessions().map(s => (
+                            {getFilteredCardio().length > 0 ? getFilteredCardio().map(s => (
                                 <tr key={s.id} className="hover:bg-gray-900">
                                     <td className="px-4 py-2 font-bold text-white">{s.date}</td>
                                     <td className="px-4 py-2 uppercase text-xs">{s.type}</td>
@@ -475,73 +458,60 @@ export default function SettingsView() {
                                     <td className="px-4 py-2 italic text-gray-500">{s.notes || '-'}</td>
                                 </tr>
                             )) : (
-                                <tr><td colSpan={4} className="px-4 py-4 text-center text-gray-500">Brak sesji cardio</td></tr>
+                                <tr><td colSpan={4} className="px-4 py-4 text-center text-gray-500">Brak sesji cardio w wybranym zakresie</td></tr>
                             )}
                         </tbody>
                     </table>
                 </section>
 
-                {/* SECTION 3: WORKOUT LOGS */}
+                {/* SECTION: WORKOUT LOGS (CHARTS ONLY) */}
                 <section>
                     <h2 className="text-xl font-bold text-red-500 border-b border-red-800 pb-2 mb-6 flex items-center">
-                        <i className="fas fa-dumbbell mr-2"></i> Dziennik Treningowy
+                        <i className="fas fa-chart-line mr-2"></i> Analiza Treningowa
                     </h2>
                     
                     {Object.keys(workouts).map(wId => {
                         const history = storage.getHistory(wId);
                         const plan = workouts[wId];
-                        if(history.length === 0) return null;
+                        
+                        // Check if we have enough data for charts
+                        const hasCharts = plan.exercises.some(ex => getExerciseChartData(wId, ex.id).length >= 2);
+
+                        if(!hasCharts && history.length === 0) return null;
 
                         return (
-                            <div key={wId} className="mb-10">
+                            <div key={wId} className="mb-10 break-inside-avoid">
                                 <h3 className="text-lg font-bold text-white bg-[#1e1e1e] p-2 border-l-4 border-red-600 mb-4 flex justify-between">
                                     {plan.title}
-                                    <span className="text-xs font-normal text-gray-400 mt-1">{history.length} treningów</span>
+                                    <span className="text-xs font-normal text-gray-400 mt-1">{history.length} wykonanych treningów (łącznie)</span>
                                 </h3>
 
-                                {/* CHARTS GRID */}
-                                <div className="grid grid-cols-2 gap-4 mb-6">
-                                    {plan.exercises.map(ex => {
-                                        const cData = getExerciseChartData(wId, ex.id);
-                                        if (cData.length < 2) return null;
-                                        return (
-                                            <div key={ex.id} className="bg-[#181818] p-2 rounded border border-gray-800 break-inside-avoid">
-                                                <div className="flex justify-between items-center mb-1">
-                                                    <span className="text-[10px] font-bold text-gray-300 truncate w-3/4">{ex.name}</span>
-                                                    <span className="text-[8px] text-red-500">{Math.max(...cData.map(d=>d.weight))}kg</span>
+                                {/* CHARTS GRID ONLY */}
+                                {hasCharts ? (
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {plan.exercises.map(ex => {
+                                            const cData = getExerciseChartData(wId, ex.id);
+                                            if (cData.length < 2) return null;
+                                            return (
+                                                <div key={ex.id} className="bg-[#181818] p-2 rounded border border-gray-800 break-inside-avoid">
+                                                    <div className="flex justify-between items-center mb-1">
+                                                        <span className="text-[10px] font-bold text-gray-300 truncate w-3/4">{ex.name}</span>
+                                                        <span className="text-[8px] text-red-500">{Math.max(...cData.map(d=>d.weight))}kg</span>
+                                                    </div>
+                                                    <div className="h-[60px] w-full">
+                                                        <ResponsiveContainer width="100%" height="100%">
+                                                            <LineChart data={cData}>
+                                                                <Line type="monotone" dataKey="weight" stroke="#ef4444" strokeWidth={2} dot={false} isAnimationActive={false} />
+                                                            </LineChart>
+                                                        </ResponsiveContainer>
+                                                    </div>
                                                 </div>
-                                                <div className="h-[60px] w-full">
-                                                    <ResponsiveContainer width="100%" height="100%">
-                                                        <LineChart data={cData}>
-                                                            <Line type="monotone" dataKey="weight" stroke="#ef4444" strokeWidth={2} dot={false} isAnimationActive={false} />
-                                                        </LineChart>
-                                                    </ResponsiveContainer>
-                                                </div>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-
-                                <div className="space-y-4">
-                                    {history.map((session, sIdx) => (
-                                        <div key={sIdx} className="border border-gray-800 rounded bg-[#181818] p-3 break-inside-avoid">
-                                            <div className="flex justify-between items-center mb-2 border-b border-gray-800 pb-1">
-                                                <span className="font-bold text-white text-sm">{session.date}</span>
-                                            </div>
-                                            <div className="grid grid-cols-1 gap-1">
-                                                {Object.entries(session.results).map(([exId, res]) => {
-                                                    const exName = plan.exercises.find(e => e.id === exId)?.name || exId;
-                                                    return (
-                                                        <div key={exId} className="text-xs flex justify-between">
-                                                            <span className="text-gray-400 truncate w-1/2">{exName}:</span>
-                                                            <span className="text-gray-200 font-mono w-1/2 text-right">{res}</span>
-                                                        </div>
-                                                    )
-                                                })}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-gray-500 italic p-2">Zbyt mało danych do wygenerowania wykresów (wymagane min. 2 treningi z zapisanym ciężarem).</p>
+                                )}
                             </div>
                         )
                     })}
