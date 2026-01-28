@@ -1,5 +1,6 @@
 import React, { useContext, useState, useRef } from 'react';
 import { AppContext } from '../App';
+import { storage } from '../services/storage';
 import { DEFAULT_WORKOUTS, CLIENT_CONFIG } from '../constants';
 import { Exercise, WorkoutPlan } from '../types';
 
@@ -87,6 +88,11 @@ export default function SettingsView() {
 
   // --- Backup Logic ---
   const handleExport = () => {
+    // FIX: Wymuś zapis aktualnego stanu z pamięci RAM (workouts) do LocalStorage przed eksportem.
+    // Rozwiązuje to problem pustego pliku przy świeżej instalacji/zmianie klucza,
+    // gdzie dane są w React State, ale jeszcze nie w localStorage.
+    storage.saveWorkouts(workouts);
+
     const data: any = {};
     // Iterate localStorage and grab keys related to this app
     for(let i = 0; i < localStorage.length; i++) {
