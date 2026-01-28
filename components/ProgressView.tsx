@@ -78,7 +78,7 @@ export default function ProgressView() {
         y={y - 8} 
         fill="#fff" 
         textAnchor="middle" 
-        fontSize={8} 
+        fontSize={10} 
         fontWeight="bold"
       >
         {value}
@@ -118,21 +118,20 @@ export default function ProgressView() {
       </div>
 
       {/* Kontener treści do eksportu */}
-      {/* min-w-[700px] wymusza układ szeroki dla generatora PDF nawet na mobile */}
-      <div className="overflow-x-auto">
-          <div ref={contentRef} className="bg-[#121212] p-2 md:p-4 rounded-xl min-w-[700px]">
+      <div className="overflow-x-visible">
+          <div ref={contentRef} className="bg-[#121212] p-1 md:p-4 rounded-xl w-full">
             
             {/* Nagłówek widoczny w PDF */}
             <div className="mb-4 text-center border-b border-gray-700 pb-2">
-                <h1 className="text-2xl font-bold text-red-500 uppercase">{currentWorkout?.title}</h1>
+                <h1 className="text-xl font-bold text-red-500 uppercase">{currentWorkout?.title}</h1>
                 <div className="flex justify-between text-gray-400 text-xs mt-1 px-4">
                     <span>Raport: {CLIENT_CONFIG.name}</span>
                     <span>Data: {new Date().toLocaleDateString()}</span>
                 </div>
             </div>
 
-            {/* Grid 2 kolumnowy dla PDF (dzięki min-w-700) */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* Zmiana: Lista pionowa (grid-cols-1), mniejszy gap */}
+            <div className="grid grid-cols-1 gap-3">
                 {currentWorkout?.exercises.map((ex) => {
                     const data = getExerciseData(selectedWorkoutId, ex.id);
                     const hasData = data && data.length > 0;
@@ -152,22 +151,21 @@ export default function ProgressView() {
                     const maxWeight = maxVal;
 
                     return (
-                        <div key={ex.id} className="bg-[#1e1e1e] p-2 rounded-lg shadow-sm border border-gray-800 break-inside-avoid">
-                            <div className="flex justify-between items-end mb-2 border-b border-gray-700 pb-1">
+                        <div key={ex.id} className="bg-[#1e1e1e] p-3 rounded-lg shadow-sm border border-gray-800 break-inside-avoid">
+                            <div className="flex justify-between items-center mb-1 border-b border-gray-700 pb-1">
                                 <div>
-                                    <h3 className="font-bold text-white text-xs truncate max-w-[150px]">{ex.name}</h3>
+                                    <h3 className="font-bold text-white text-sm truncate max-w-[200px]">{ex.name}</h3>
                                 </div>
                                 <div className="text-right">
-                                    <span className="text-[10px] text-gray-400 block">Max</span>
-                                    <span className="text-sm font-bold text-blue-400">{maxWeight} kg</span>
+                                    <span className="text-xs font-bold text-blue-400">Max: {maxWeight} kg</span>
                                 </div>
                             </div>
 
-                            {/* Zmniejszona wysokość wykresu */}
-                            <div className="h-40 w-full">
+                            {/* Zmiana: Znacznie mniejsza wysokość (h-24 = 96px) */}
+                            <div className="h-24 w-full">
                                 {data.length < 2 ? (
                                     <div className="h-full flex items-center justify-center text-gray-600 text-[10px] text-center">
-                                        Za mało danych do linii.
+                                        Za mało danych (wymagane min. 2 treningi)
                                     </div>
                                 ) : (
                                     <ResponsiveContainer width="100%" height="100%">
@@ -176,9 +174,9 @@ export default function ProgressView() {
                                         <XAxis 
                                             dataKey="date" 
                                             stroke="#666" 
-                                            tick={{fill: '#888', fontSize: 8}} 
+                                            tick={{fill: '#888', fontSize: 10}} 
                                             tickMargin={5}
-                                            minTickGap={20}
+                                            minTickGap={30}
                                         />
                                         <YAxis 
                                             type="number"
@@ -195,9 +193,9 @@ export default function ProgressView() {
                                             type="monotone" 
                                             dataKey="weight" 
                                             stroke="#ef4444" 
-                                            strokeWidth={1.5} 
-                                            dot={{ r: 2, fill: '#ef4444', strokeWidth: 1, stroke: '#1e1e1e' }} 
-                                            activeDot={{ r: 4, fill: '#fff' }}
+                                            strokeWidth={2} 
+                                            dot={{ r: 3, fill: '#ef4444', strokeWidth: 1, stroke: '#1e1e1e' }} 
+                                            activeDot={{ r: 5, fill: '#fff' }}
                                             isAnimationActive={false}
                                             label={<CustomLabel />}
                                         />
@@ -216,6 +214,7 @@ export default function ProgressView() {
                     <div className="col-span-full text-center py-10 text-gray-500">
                         <i className="fas fa-chart-bar text-4xl mb-4 opacity-50"></i>
                         <p>Brak danych dla wybranego planu.</p>
+                        <p className="text-xs mt-2">Zrób pierwszy trening, aby zobaczyć wykresy.</p>
                     </div>
                 )}
             </div>
